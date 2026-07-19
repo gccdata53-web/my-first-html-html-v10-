@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Task Report — Site Team Requests</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- Firebase SDK v9+ modular -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAX0qlftOHm2n5CoijlMsDb9U2RLRVMRI",
+    authDomain: "gccdata15.firebaseapp.com",
+    projectId: "gccdata15",
+    storageBucket: "gccdata15.firebasestorage.app",
+    messagingSenderId: "560504893050",
+    appId: "1:560504893050:web:7f737dfcdd22f4eb5115c3"
+  };
+
+  let app, db;
+  
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    
+    window.firebaseServices = {
+      db,
+      collection,
+      addDoc,
+      updateDoc,
+      deleteDoc,
+      doc,
+      serverTimestamp,
+      onSnapshot,
+      query,
+      orderBy,
+      initialized: true
+    };
+    
+    console.log("✅ Firebase ready");
+  } catch (error) {
+    console.error("Firebase error:", error);
+    window.firebaseServices = { initialized: false };
+  }
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #F0F4F8; }
+  input, select, textarea, button { font-family: inherit; }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+  }
+  @keyframes gFadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes gFadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .g-fade { animation: gFadeInUp 0.4s ease both; }
+  .g-fade-fast { animation: gFadeIn 0.3s ease both; }
+  .g-btn { transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s ease, filter 0.18s ease; }
+  .g-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(99,126,188,0.28) !important; filter: brightness(1.04); }
+  .g-btn:active { transform: translateY(0) scale(0.97); }
+  .g-icon-btn { transition: transform 0.15s ease, background 0.15s ease; }
+  .g-icon-btn:hover { transform: scale(1.15); background: #E4EEF9 !important; }
+  .fb-status { position: fixed; bottom: 10px; right: 10px; padding: 8px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; z-index: 9999; }
+  .fb-status.connected { background: #D6F5E6; color: #1A6640; }
+  .fb-status.disconnected { background: #FFE0E6; color: #B02A46; }
+  .fb-status.syncing { background: #FFF0DC; color: #8A4D0F; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+  .g-toast { position: fixed; bottom: 46px; right: 10px; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; z-index: 9999; box-shadow: 0 4px 14px rgba(0,0,0,0.15); }
+  .g-toast.success { background: #D6F5E6; color: #1A6640; }
+  .g-toast.error { background: #FFE0E6; color: #B02A46; }
+  .g-toast.warning { background: #FFF0DC; color: #8A4D0F; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const STORAGE_KEY = 'task_tracker_rows_v2';
+const fb = window.firebaseServices || { initialized: false };
+
+function loadCachedRows() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+const TYPE_STYLES = {
+  CSV: { bg: '#D6E4FF', text: '#2B5CB8', border: '#A8C4F8' },
+  PDF: { bg: '#FFE0E6', text: '#B02A46', border: '#F5AABB' },
+  CAD: { bg: '#D2F5EC', text: '#1A7A5E', border: '#8FE0CC' },
+  DWG: { bg: '#D2F5EC', text: '#1A7A5E', border: '#8FE0CC' },
+};
+const FALLBACK_STYLE = { bg: '#EDE9FF', text: '#5340B8', border: '#C4BAF8' };
+const styleFor = (t) => TYPE_STYLES[t] || FALLBACK_STYLE;
+
+const PARK_OPTIONS = [
+  'CNP-03', 'CNP-06', 'CNP-07',
+  'ECP-06', 'ECP-07', 'ECP-08', 'ECP-16',
+  'Artist Row (A)', 'Artist Row (B)',
+  'GP-03', 'GP-04', 'CLP',
+];
+
+const DRAWING_VERSION_OPTIONS = ['C00','C01','C02','C03','C04','C05','C06','C07','C08','C09','Last Update'];
+
+const DRAWING_STATUS_OPTIONS = [
+  { value: 'Code A', label: 'Code A - Approved',               color: { bg: '#D6F5E6', text: '#1A6640', border: '#8FD9B0' } },
+  { value: 'Code B', label: 'Code B - Approved with Comments', color: { bg: '#D2F5EC', text: '#1A7A5E', border: '#8FE0CC' } },
+  { value: 'Code C', label: 'Code C - Revise & Resubmit',      color: { bg: '#FFF0DC', text: '#8A4D0F', border: '#F5C97A' } },
+  { value: 'Code D', label: 'Code D - Rejected',               color: { bg: '#FFE0E6', text: '#B02A46', border: '#F5AABB' } },
+  { value: 'NS',     label: 'NS - Not Submitted',               color: { bg: '#F3F4F6', text: '#4B5563', border: '#D1D5DB' } },
+  { value: 'UR',     label: 'UR - Under Review',               color: { bg: '#EDE9FF', text: '#5340B8', border: '#C4BAF8' } },
+];
+const drawingStatusInfo = (v) => DRAWING_STATUS_OPTIONS.find((d) => d.value === v) || null;
+
+const QUERY_STATUS_OPTIONS = [
+  { value: 'Active',  label: 'Active',  color: { bg: '#D6E4FF', text: '#2B5CB8', border: '#A8C4F8' } },
+  { value: 'Pending', label: 'Pending', color: { bg: '#FFF0DC', text: '#8A4D0F', border: '#F5C97A' } },
+  { value: 'Hold',    label: 'Hold',    color: { bg: '#EDE9FF', text: '#5340B8', border: '#C4BAF8' } },
+  { value: 'Done',    label: 'Done',    color: { bg: '#D6F5E6', text: '#1A6640', border: '#8FD9B0' } },
+];
+const queryStatusInfo = (v) => QUERY_STATUS_OPTIONS.find((q) => q.value === v) || QUERY_STATUS_OPTIONS[1];
+
+const REQUESTED_BY_OPTIONS = [
+  { name: 'Shady', role: 'CM' },
+  { name: 'Osama', role: 'Site' },
+  { name: 'Kamilton', role: 'Civil' },
+  { name: 'Farooq', role: 'Eng' },
+  { name: 'Majid', role: 'Mep' },
+  { name: 'Jamil', role: 'Irrigation' },
+  { name: 'Rady & Mohsin', role: 'Surv' },
+];
+
+const DRAFTSMAN_OPTIONS = [
+  { name: 'Irfan-Trees',              icon: '🌳', role: 'Trees' },
+  { name: 'Faisal-Hardscape',         icon: '🏗️', role: 'Hardscape' },
+  { name: 'Rasheed-Softscape',        icon: '🌿', role: 'Softscape' },
+  { name: 'Obaid-Irrigation',         icon: '💧', role: 'Irrigation' },
+  { name: 'Kabeer-1st Flr Hardscape', icon: '🏢', role: '1st Floor Hardscape' },
+  { name: 'Faisal-WPC Shade',         icon: '☀️', role: 'WPC Shade' },
+  { name: 'Umair-Senior Draftman',    icon: '⚡', role: 'Senior Draftman' },
+  { name: 'Aleem-Manager',            icon: '📊', role: 'Manager' },
+];
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const nowStr = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const formatDateDisplay = (d) => {
+  if (!d) return '';
+  const parts = d.split('-');
+  if (parts.length !== 3) return d;
+  const [y, m, day] = parts;
+  return `${day}/${m}/${y.slice(-2)}`;
+};
+
+const formatTimeDisplay = (t) => {
+  if (!t) return '';
+  const parts = t.split(':');
+  if (parts.length < 2) return t;
+  let h = parseInt(parts[0], 10);
+  const mins = parts[1];
+  if (isNaN(h)) return t;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${mins} ${ampm}`;
+};
+
+const emptyForm = { area: '', type: 'CSV', item: '', drawingVersion: '', requestedBy: '', date: todayStr(), time: nowStr(), drawingStatus: 'UR', draftsman: '', draftsmanDate: todayStr(), draftsmanTime: nowStr(), queryStatus: 'Pending' };
+
+// Firebase helpers
+const saveToFirebase = async (rowData) => {
+  if (!fb.initialized) return null;
+  try {
+    const docRef = await fb.addDoc(
+      fb.collection(fb.db, "task_reports"),
+      { ...rowData, createdAt: fb.serverTimestamp(), updatedAt: fb.serverTimestamp() }
+    );
+    return docRef.id;
+  } catch (error) {
+    console.error("Firebase save error:", error);
+    return null;
+  }
+};
+
+const updateInFirebase = async (docId, rowData) => {
+  if (!fb.initialized || !docId) return false;
+  try {
+    await fb.updateDoc(fb.doc(fb.db, "task_reports", docId), { ...rowData, updatedAt: fb.serverTimestamp() });
+    return true;
+  } catch (error) {
+    console.error("Firebase update error:", error);
+    return false;
+  }
+};
+
+const deleteFromFirebase = async (docId) => {
+  if (!fb.initialized || !docId) return false;
+  try {
+    await fb.deleteDoc(fb.doc(fb.db, "task_reports", docId));
+    return true;
+  } catch (error) {
+    console.error("Firebase delete error:", error);
+    return false;
+  }
+};
+
+const ROWS_PER_PAGE = 10;
+
+function TaskTracker() {
+  const [rows, setRows] = useState(loadCachedRows());
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [showForm, setShowForm] = useState(false);
+  const [typeTab, setTypeTab] = useState('all');
+  const [areaFilter, setAreaFilter] = useState('all');
+  const [queryStatusFilter, setQueryStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [firebaseStatus, setFirebaseStatus] = useState(fb.initialized ? 'syncing' : 'disconnected');
+  const [toast, setToast] = useState(null); // { msg, type: 'success' | 'error' | 'warning' }
+
+  const syncToStorage = (newRows) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newRows));
+  };
+
+  const showToast = (msg, type) => {
+    setToast({ msg, type, key: Date.now() });
+  };
+
+  // Auto-dismiss toast after 3.5s
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Wraps a Firebase write: shows "syncing", and if it's still not done after
+  // 8s, warns the user the connection may be stuck (without cancelling it).
+  const withSyncStatus = async (action) => {
+    setFirebaseStatus('syncing');
+    let settled = false;
+    const stuckTimer = setTimeout(() => {
+      if (!settled) showToast('⚠️ Still syncing — check your internet connection', 'warning');
+    }, 8000);
+    try {
+      const result = await action();
+      settled = true;
+      clearTimeout(stuckTimer);
+      return result;
+    } catch (e) {
+      settled = true;
+      clearTimeout(stuckTimer);
+      throw e;
+    }
+  };
+
+  // Realtime Firestore sync — every add/edit/delete (from this device or any other)
+  // is pushed to all connected devices instantly via onSnapshot.
+  useEffect(() => {
+    if (!fb.initialized) return;
+    const q = fb.query(fb.collection(fb.db, 'task_reports'), fb.orderBy('createdAt', 'asc'));
+    const unsubscribe = fb.onSnapshot(
+      q,
+      (snapshot) => {
+        const liveRows = snapshot.docs.map((d) => ({ docId: d.id, ...d.data() }));
+        setRows(liveRows);
+        syncToStorage(liveRows);
+        setFirebaseStatus('connected');
+      },
+      (error) => {
+        console.error('Firestore snapshot error:', error);
+        setFirebaseStatus('disconnected');
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Reset to page 1 whenever a filter or search changes
+  useEffect(() => {
+    setPage(1);
+  }, [typeTab, areaFilter, queryStatusFilter, search]);
+
+  const addRow = async () => {
+    if (!form.area.trim() || !form.item.trim()) return;
+
+    const rowData = {
+      area: form.area.trim(),
+      type: form.type,
+      item: form.item.trim(),
+      drawingVersion: form.drawingVersion || '',
+      requestedBy: form.requestedBy.trim(),
+      date: form.date,
+      time: form.time,
+      drawingStatus: form.drawingStatus || 'UR',
+      draftsman: form.draftsman.trim(),
+      draftsmanDate: form.draftsmanDate || '',
+      draftsmanTime: form.draftsmanTime || '',
+      queryStatus: form.queryStatus || 'Pending',
+    };
+
+    setForm({ ...emptyForm, date: todayStr(), time: nowStr(), draftsmanDate: todayStr(), draftsmanTime: nowStr() });
+    setShowForm(false);
+
+    if (fb.initialized) {
+      // Firestore's local cache applies this write instantly for this device
+      // (the onSnapshot listener above fires right away) and pushes it to
+      // every other connected device in the background.
+      const firebaseId = await withSyncStatus(() => saveToFirebase(rowData));
+      if (firebaseId) {
+        showToast('✅ Saved to cloud', 'success');
+        setFirebaseStatus('connected');
+      } else {
+        showToast('❌ Failed to save — check your connection', 'error');
+        setFirebaseStatus('disconnected');
+      }
+    } else {
+      // Offline fallback: no Firebase connection, keep working locally
+      const newRow = { ...rowData, docId: 'row_' + Date.now() };
+      const newRows = [...rows, newRow];
+      setRows(newRows);
+      syncToStorage(newRows);
+    }
+  };
+
+  const deleteRow = async (docId) => {
+    if (fb.initialized) {
+      const ok = await withSyncStatus(() => deleteFromFirebase(docId));
+      if (ok) {
+        showToast('✅ Entry deleted', 'success');
+        setFirebaseStatus('connected');
+      } else {
+        showToast('❌ Failed to delete — check your connection', 'error');
+        setFirebaseStatus('disconnected');
+      }
+    } else {
+      const newRows = rows.filter((r) => r.docId !== docId);
+      setRows(newRows);
+      syncToStorage(newRows);
+    }
+  };
+
+  const startEdit = (row) => {
+    setEditingId(row.docId);
+    setEditForm({ 
+      area: row.area, type: row.type, item: row.item, drawingVersion: row.drawingVersion || '', 
+      requestedBy: row.requestedBy, date: row.date, time: row.time, drawingStatus: row.drawingStatus || 'UR', 
+      draftsman: row.draftsman || '', draftsmanDate: row.draftsmanDate || '', draftsmanTime: row.draftsmanTime || '', 
+      queryStatus: row.queryStatus || 'Pending' 
+    });
+  };
+
+  const saveEdit = async (docId) => {
+    setEditingId(null);
+
+    if (fb.initialized) {
+      const ok = await withSyncStatus(() => updateInFirebase(docId, editForm));
+      if (ok) {
+        showToast('✅ Changes saved', 'success');
+        setFirebaseStatus('connected');
+      } else {
+        showToast('❌ Failed to save changes — check your connection', 'error');
+        setFirebaseStatus('disconnected');
+      }
+    } else {
+      const newRows = rows.map((r) => (r.docId === docId ? { ...r, ...editForm } : r));
+      setRows(newRows);
+      syncToStorage(newRows);
+    }
+  };
+
+  const exportCSV = () => {
+    const header = 'Sr,Park,Type,Item,Drawing Revision No,Requested By,Date,Time,Drawing Status,Draftsman,Draftsman Date,Draftsman Time,Query Status\n';
+    const body = visibleRows
+      .map((r) => {
+        const ds = drawingStatusInfo(r.drawingStatus);
+        const qs = queryStatusInfo(r.queryStatus);
+        return `${r.sr},"${r.area}",${r.type},"${r.item}","${r.drawingVersion || ''}","${r.requestedBy}",${formatDateDisplay(r.date)},${formatTimeDisplay(r.time)},"${ds ? ds.label : ''}","${r.draftsman || ''}","${formatDateDisplay(r.draftsmanDate)}","${formatTimeDisplay(r.draftsmanTime)}",${qs.label}`;
+      })
+      .join('\n');
+    const blob = new Blob([header + body], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `daily_task_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const visibleRows = (typeTab === 'all' ? rows : rows.filter((r) => r.type === typeTab))
+    .filter((r) => (areaFilter === 'all' ? true : r.area === areaFilter))
+    .filter((r) => (queryStatusFilter === 'all' ? true : r.queryStatus === queryStatusFilter))
+    .filter((r) => {
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return (
+        r.area.toLowerCase().includes(q) ||
+        r.item.toLowerCase().includes(q) ||
+        r.requestedBy.toLowerCase().includes(q) ||
+        r.type.toLowerCase().includes(q)
+      );
+    })
+    .map((r, i) => ({ ...r, sr: i + 1 }));
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / ROWS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = visibleRows.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+
+  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: '#5B7BA8', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' };
+  const inputStyle = { width: '100%', border: '1.5px solid #C8D9EE', borderRadius: 6, padding: '9px 11px', fontSize: 14, outline: 'none', background: '#FAFCFF', color: '#1E2D4A' };
+  const editInputStyle = { width: '100%', border: '1.5px solid #C8D9EE', borderRadius: 4, padding: '5px 7px', fontSize: 13, background: '#FAFCFF', color: '#1E2D4A' };
+  const thStyle = { padding: '11px 14px', textAlign: 'left', color: '#2A3F6A', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: '#F3F4F6' };
+  const tdStyle = { padding: '11px 14px', verticalAlign: 'top', color: '#2C3A52' };
+  const iconBtn = (color) => ({ background: 'none', border: 'none', cursor: 'pointer', color, padding: 5, marginRight: 2, display: 'inline-flex', alignItems: 'center', borderRadius: 4, fontSize: 15 });
+
+  return (
+    <div style={{ minHeight: '100vh' }}>
+      <div className={`fb-status ${firebaseStatus}`}>
+        {firebaseStatus === 'connected' && '🟢 Connected'}
+        {firebaseStatus === 'disconnected' && '🔴 Offline'}
+        {firebaseStatus === 'syncing' && '🔄 Syncing'}
+      </div>
+
+      {toast && (
+        <div key={toast.key} className={`g-toast ${toast.type} g-fade-fast`}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div style={{ background: 'linear-gradient(135deg, #F8FAFF 0%, #EBF2FF 50%, #DDE8FA 100%)', padding: '20px 24px', borderBottom: '3px solid #B8CFEE', boxShadow: '0 2px 8px rgba(99,126,188,0.1)' }}>
+        <div style={{ maxWidth: 1600, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ color: '#5B7EC2', fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>Site Coordination</div>
+            <h1 style={{ color: '#1E2D4A', fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>Daily Task Report — Site Team Requests</h1>
+            <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5B7EC2' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: firebaseStatus === 'connected' ? '#3FBE79' : '#7FA8E8', display: 'inline-block' }}></span>
+              {firebaseStatus === 'connected' && 'Synced to cloud (Firestore)'}
+              {firebaseStatus === 'syncing' && 'Syncing…'}
+              {firebaseStatus === 'disconnected' && 'Saved on this device (offline)'}
+            </div>
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: '#3B82F6' }}>{rows.length} <div style={{ fontSize: 12, color: '#5B7EC2', fontWeight: 600, marginTop: 4 }}>Total Requests</div></div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px' }}>
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="g-btn" onClick={() => setShowForm(!showForm)} style={{ padding: '10px 20px', background: showForm ? '#E5E7EB' : '#3B82F6', color: showForm ? '#374151' : '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            {showForm ? '✕ Cancel' : '+ Add Entry'}
+          </button>
+          <button className="g-btn" onClick={() => window.print()} style={{ padding: '10px 20px', background: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            🖨 Print
+          </button>
+          <button className="g-btn" onClick={exportCSV} style={{ padding: '10px 20px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            📥 Export CSV
+          </button>
+        </div>
+
+        {/* Add Form */}
+        {showForm && (
+          <div style={{ background: '#fff', borderRadius: 12, padding: '24px', marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }} className="g-fade">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Park</label>
+                <select style={inputStyle} value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })}>
+                  <option value="">Select or type park name</option>
+                  {PARK_OPTIONS.map((p) => (<option key={p} value={p}>{p}</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Type</label>
+                <select style={inputStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                  <option value="CSV">CSV</option>
+                  <option value="PDF">PDF</option>
+                  <option value="CAD">CAD</option>
+                  <option value="DWG">DWG</option>
+                </select>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Activity Request / Dwg No</label>
+                <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit' }} placeholder="e.g. ECP-07 irrigation pull boxes / DWG-045" value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Drawing Revision No</label>
+                <select style={inputStyle} value={form.drawingVersion} onChange={(e) => setForm({ ...form, drawingVersion: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {DRAWING_VERSION_OPTIONS.map((v) => (<option key={v} value={v}>{v}</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Requested By Site</label>
+                <select style={inputStyle} value={form.requestedBy} onChange={(e) => setForm({ ...form, requestedBy: e.target.value })}>
+                  <option value="">Select name</option>
+                  {REQUESTED_BY_OPTIONS.map((p) => (<option key={p.name} value={p.name}>{p.role.toUpperCase()}-{p.name.toUpperCase()}</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Date</label>
+                <input type="date" lang="en-GB" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Time</label>
+                <input type="time" style={inputStyle} value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Drawing Status</label>
+                <select style={inputStyle} value={form.drawingStatus} onChange={(e) => setForm({ ...form, drawingStatus: e.target.value })}>
+                  {DRAWING_STATUS_OPTIONS.map((d) => (<option key={d.value} value={d.value}>{d.label}</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Draftsman</label>
+                <select style={inputStyle} value={form.draftsman} onChange={(e) => setForm({ ...form, draftsman: e.target.value })}>
+                  <option value="">Select name</option>
+                  {DRAFTSMAN_OPTIONS.map((p) => (<option key={p.name} value={p.name}>{p.icon} {p.name}</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Drawing Given Date</label>
+                <input type="date" lang="en-GB" style={inputStyle} value={form.draftsmanDate} onChange={(e) => setForm({ ...form, draftsmanDate: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Drawing Given Time</label>
+                <input type="time" style={inputStyle} value={form.draftsmanTime} onChange={(e) => setForm({ ...form, draftsmanTime: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Query Status</label>
+                <select style={inputStyle} value={form.queryStatus} onChange={(e) => setForm({ ...form, queryStatus: e.target.value })}>
+                  {QUERY_STATUS_OPTIONS.map((q) => (<option key={q.value} value={q.value}>{q.label}</option>))}
+                </select>
+              </div>
+            </div>
+            <button className="g-btn" onClick={addRow} style={{ marginTop: 16, padding: '10px 20px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Save Entry
+            </button>
+          </div>
+        )}
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, backgroundColor: '#fff', padding: '8px', borderRadius: 6 }}>
+            {['All Requests', 'CSV Files', 'PDF Files', 'CAD Files'].map((label, i) => (
+              <button
+                key={i}
+                onClick={() => setTypeTab(['all', 'CSV', 'PDF', 'CAD'][i])}
+                style={{
+                  padding: '8px 16px',
+                  background: (i === 0 && typeTab === 'all') || (i > 0 && typeTab === ['', 'CSV', 'PDF', 'CAD'][i]) ? '#3B82F6' : '#fff',
+                  color: (i === 0 && typeTab === 'all') || (i > 0 && typeTab === ['', 'CSV', 'PDF', 'CAD'][i]) ? '#fff' : '#374151',
+                  border: (i === 0 && typeTab === 'all') || (i > 0 && typeTab === ['', 'CSV', 'PDF', 'CAD'][i]) ? 'none' : '1px solid #D1D5DB',
+                  borderRadius: 4,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginLeft: 'auto' }}>
+            <select style={{ padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151' }} value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)}>
+              <option value="all">All Areas</option>
+              {PARK_OPTIONS.map((p) => (<option key={p} value={p}>{p}</option>))}
+            </select>
+
+            <select style={{ padding: '8px 14px', border: '1px solid #D1D5DB', borderRadius: 20, fontSize: 13, fontWeight: 600, background: '#fff', color: '#374151', cursor: 'pointer' }} value={queryStatusFilter} onChange={(e) => setQueryStatusFilter(e.target.value)}>
+              <option value="all">Query Status: All</option>
+              {QUERY_STATUS_OPTIONS.map((q) => (<option key={q.value} value={q.value}>Query Status: {q.label}</option>))}
+            </select>
+
+            <input
+              type="text"
+              placeholder="Search by section, item, name..."
+              style={{ padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, minWidth: 250 }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#F3F4F6', borderBottom: '2px solid #E5E7EB' }}>
+                  <th style={thStyle}>#</th>
+                  <th style={thStyle}>Park</th>
+                  <th style={thStyle}>Type</th>
+                  <th style={thStyle}>Activity Request / Dwg No</th>
+                  <th style={thStyle}>Rev No</th>
+                  <th style={thStyle}>Requested By Site</th>
+                  <th style={thStyle}>Date / Time</th>
+                  <th style={thStyle}>Drawing Status</th>
+                  <th style={thStyle}>Draftsman</th>
+                  <th style={thStyle}>Drawing Given</th>
+                  <th style={thStyle}>Query Status</th>
+                  <th className="no-print" style={thStyle}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedRows.map((row) => (
+                  <tr key={row.docId} style={{ borderBottom: '1px solid #E5E7EB', background: '#fff' }}>
+                    {editingId === row.docId ? (
+                      <React.Fragment>
+                        <td style={tdStyle}>{row.sr}</td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.area} onChange={(e) => setEditForm({ ...editForm, area: e.target.value })}><option value="">Select</option>{PARK_OPTIONS.map((p) => (<option key={p} value={p}>{p}</option>))}</select></td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}><option value="CSV">CSV</option><option value="PDF">PDF</option><option value="CAD">CAD</option></select></td>
+                        <td style={tdStyle}><input style={editInputStyle} value={editForm.item} onChange={(e) => setEditForm({ ...editForm, item: e.target.value })} /></td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.drawingVersion} onChange={(e) => setEditForm({ ...editForm, drawingVersion: e.target.value })}><option value="">—</option>{DRAWING_VERSION_OPTIONS.map((v) => (<option key={v} value={v}>{v}</option>))}</select></td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.requestedBy} onChange={(e) => setEditForm({ ...editForm, requestedBy: e.target.value })}><option value="">Select</option>{REQUESTED_BY_OPTIONS.map((p) => (<option key={p.name} value={p.name}>{p.role.toUpperCase()}-{p.name.toUpperCase()}</option>))}</select></td>
+                        <td style={tdStyle}><input type="date" lang="en-GB" style={{ ...editInputStyle, marginBottom: 4 }} value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} /><input type="time" style={editInputStyle} value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} /></td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.drawingStatus} onChange={(e) => setEditForm({ ...editForm, drawingStatus: e.target.value })}>{DRAWING_STATUS_OPTIONS.map((d) => (<option key={d.value} value={d.value}>{d.label}</option>))}</select></td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.draftsman} onChange={(e) => setEditForm({ ...editForm, draftsman: e.target.value })}><option value="">Select</option>{DRAFTSMAN_OPTIONS.map((p) => (<option key={p.name} value={p.name}>{p.icon} {p.name}</option>))}</select></td>
+                        <td style={tdStyle}><input type="date" lang="en-GB" style={{ ...editInputStyle, marginBottom: 4 }} value={editForm.draftsmanDate} onChange={(e) => setEditForm({ ...editForm, draftsmanDate: e.target.value })} /><input type="time" style={editInputStyle} value={editForm.draftsmanTime} onChange={(e) => setEditForm({ ...editForm, draftsmanTime: e.target.value })} /></td>
+                        <td style={tdStyle}><select style={editInputStyle} value={editForm.queryStatus} onChange={(e) => setEditForm({ ...editForm, queryStatus: e.target.value })}>{QUERY_STATUS_OPTIONS.map((q) => (<option key={q.value} value={q.value}>{q.label}</option>))}</select></td>
+                        <td className="no-print" style={{ ...tdStyle, whiteSpace: 'nowrap' }}><button className="g-icon-btn" onClick={() => saveEdit(row.docId)} style={iconBtn('#4A7A52')}>✓</button><button className="g-icon-btn" onClick={() => setEditingId(null)} style={iconBtn('#9CA3AF')}>✕</button></td>
+                      </React.Fragment>
+                    ) : (
+                      <React.Fragment>
+                        <td style={{ ...tdStyle, color: '#9CA3AF', fontWeight: 600 }}>{row.sr}</td>
+                        <td style={{ ...tdStyle, fontWeight: 600, color: '#3D6BAA' }}>{row.area}</td>
+                        <td style={tdStyle}><span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700, background: styleFor(row.type).bg, color: styleFor(row.type).text }}>{row.type}</span></td>
+                        <td style={tdStyle}>{row.item}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{row.drawingVersion ? <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', background: '#D6E4FF', color: '#2B5CB8', fontSize: 12, fontWeight: 700, border: '1.5px solid #A8C4F8' }}>{row.drawingVersion}</span> : '—'}</td>
+                        <td style={{ ...tdStyle, color: '#3D5A82' }}>{row.requestedBy}</td>
+                        <td style={{ ...tdStyle, color: '#3D5A82', fontSize: 12 }}><div>{formatDateDisplay(row.date)}</div><div style={{ color: '#8AAAC8', fontSize: 11 }}>{formatTimeDisplay(row.time)}</div></td>
+                        <td style={tdStyle}>{(() => { const ds = drawingStatusInfo(row.drawingStatus); return ds ? <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 700, background: ds.color.bg, color: ds.color.text, border: `1px solid ${ds.color.border}` }}>{ds.label}</span> : '—'; })()}</td>
+                        <td style={{ ...tdStyle, color: '#3D5A82', fontSize: 12 }}>{row.draftsman || '—'}</td>
+                        <td style={{ ...tdStyle, color: '#3D5A82', fontSize: 12 }}><div>{row.draftsmanDate ? formatDateDisplay(row.draftsmanDate) : '—'}</div><div style={{ color: '#8AAAC8', fontSize: 11 }}>{row.draftsmanTime ? formatTimeDisplay(row.draftsmanTime) : '—'}</div></td>
+                        <td style={tdStyle}>{(() => { const qs = queryStatusInfo(row.queryStatus); return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: qs.color.bg, color: qs.color.text, border: `1px solid ${qs.color.border}` }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: qs.color.text }}></span>{qs.label}</span>; })()}</td>
+                        <td className="no-print" style={{ ...tdStyle, whiteSpace: 'nowrap' }}><button className="g-icon-btn" onClick={() => startEdit(row)} style={iconBtn('#5B93F2')}>✎</button><button className="g-icon-btn" onClick={() => deleteRow(row.docId)} style={iconBtn('#9B4444')}>🗑</button></td>
+                      </React.Fragment>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid #E5E7EB', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 12, color: '#6B7280' }}>
+              {visibleRows.length === 0
+                ? 'No entries'
+                : `Showing ${(currentPage - 1) * ROWS_PER_PAGE + 1}–${Math.min(currentPage * ROWS_PER_PAGE, visibleRows.length)} of ${visibleRows.length}`}
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                className="g-btn"
+                disabled={currentPage === 1}
+                onClick={() => setPage(currentPage - 1)}
+                style={{ padding: '6px 12px', background: '#fff', color: currentPage === 1 ? '#C1C7D0' : '#374151', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: currentPage === 1 ? 'default' : 'pointer' }}
+              >
+                ‹ Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  className="g-btn"
+                  onClick={() => setPage(p)}
+                  style={{
+                    padding: '6px 12px',
+                    background: p === currentPage ? '#3B82F6' : '#fff',
+                    color: p === currentPage ? '#fff' : '#374151',
+                    border: p === currentPage ? 'none' : '1px solid #D1D5DB',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    minWidth: 32
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                className="g-btn"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage(currentPage + 1)}
+                style={{ padding: '6px 12px', background: '#fff', color: currentPage === totalPages ? '#C1C7D0' : '#374151', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: currentPage === totalPages ? 'default' : 'pointer' }}
+              >
+                Next ›
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<TaskTracker />);
+</script>
+</body>
+</html>
