@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Survey Points Comparison Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --panel:#F7F8FA;
+    --panel-hover:#EFF2F6;
+    --border:#D9DEE4;
+    --border-strong:#B7C0CA;
+    --ink:#1F2937;
+    --muted:#6B7280;
+    --accent:#2563EB;
+    --ok-bg:#E7F7EE; --ok-text:#15803D; --ok-border:#86D6A6;
+    --mismatch-bg:#FDECEC; --mismatch-text:#C0392B; --mismatch-border:#F1A9A0;
+    --error-bg:#FFF6DE; --error-text:#92660B; --error-border:#F2CE72;
+    --missing-bg:#F0F1F3; --missing-text:#5B6472; --missing-border:#C7CCD3;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:Arial, Helvetica, sans-serif;
+  }
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 20px 60px;}
+  .titleblock{
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:22px;
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;
+  }
+  .titleblock h1{margin:0; font-size:20px; font-weight:700;}
+  .titleblock .sub{color:var(--muted); font-size:13px; margin-top:4px;}
+  .titleblock .meta{font-size:12px; color:var(--muted); text-align:right;}
+
+  .dropgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:20px;}
+  .dropzone{
+    border:2px dashed var(--border-strong);
+    background:var(--panel);
+    padding:18px; border-radius:8px; text-align:center; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.dragover{border-color:var(--accent); background:var(--panel-hover);}
+  .dropzone.filled{border-style:solid; border-color:var(--ok-text); background:var(--ok-bg);}
+  .dropzone .label{font-size:13px; font-weight:700; color:var(--ink);}
+  .dropzone .fname{font-size:12px; color:var(--muted); margin-top:8px; word-break:break-all; min-height:16px;}
+  .dropzone .count{font-size:18px; font-weight:700; margin-top:6px; color:var(--ink);}
+  .dropzone input{display:none;}
+
+  .controls{display:flex; gap:16px; align-items:center; margin-bottom:22px; flex-wrap:wrap;}
+  .field{display:flex; flex-direction:column; gap:4px;}
+  .field label{font-size:12px; color:var(--muted); font-weight:600;}
+  .field input{
+    background:#fff; border:1px solid var(--border-strong); color:var(--ink);
+    padding:8px 10px; border-radius:6px; width:110px; font-size:13px;
+  }
+  button.run{
+    background:var(--accent); color:#fff; border:none; padding:11px 24px;
+    font-weight:700; font-size:13px; border-radius:6px; cursor:pointer;
+  }
+  button.run:hover{background:#1D4ED8;}
+  button.run:disabled{background:#B9C4D4; cursor:not-allowed;}
+  button.dl{
+    background:#fff; border:1px solid var(--accent); color:var(--accent);
+    padding:9px 18px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700;
+  }
+  button.dl:hover{background:#EEF3FF;}
+
+  .summary{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;}
+  .stat{background:var(--panel); border:1px solid var(--border); padding:14px; border-radius:8px; text-align:center;}
+  .stat .n{font-size:26px; font-weight:700;}
+  .stat .l{font-size:12px; color:var(--muted); font-weight:600; margin-top:2px;}
+  .stat.ok .n{color:var(--ok-text);}
+  .stat.mismatch .n{color:var(--mismatch-text);}
+  .stat.error .n{color:var(--error-text);}
+  .stat.missing .n{color:var(--missing-text);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    background:var(--ink); color:#fff; text-align:left; padding:10px 12px;
+    position:sticky; top:0; font-weight:700; font-size:12px;
+  }
+  tbody td{padding:8px 12px; border-bottom:1px solid var(--border);}
+  tbody tr:nth-child(even){background:#FAFBFC;}
+  tbody tr:hover{background:var(--panel-hover);}
+  .badge{padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700; display:inline-block; border:1px solid;}
+  .badge.OK{background:var(--ok-bg); color:var(--ok-text); border-color:var(--ok-border);}
+  .badge.MISMATCH{background:var(--mismatch-bg); color:var(--mismatch-text); border-color:var(--mismatch-border);}
+  .badge.ERROR{background:var(--error-bg); color:var(--error-text); border-color:var(--error-border);}
+  .badge.MISSING{background:var(--missing-bg); color:var(--missing-text); border-color:var(--missing-border);}
+
+  .tablewrap{max-height:520px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;}
+  .footer-note{font-size:13px; color:var(--muted); margin-top:12px; line-height:1.6;}
+  .hint{font-size:13px; color:var(--muted); margin:6px 0 20px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="titleblock">
+    <div>
+      <h1>Survey Points Comparison Tool</h1>
+      <div class="sub">Design vs CSV vs As-Built &mdash; match / mismatch report</div>
+    </div>
+    <div class="meta" id="drawingMeta">Drawing No: &mdash;<br>Date: <span id="todayDate"></span></div>
+  </div>
+
+  <div class="hint">Upload CSV, Excel (.xlsx/.csv), or DXF files for each source you have. Point ID / Easting / Northing columns are auto-detected. If point IDs don't match between sources, the tool automatically matches by nearest location instead. Scanned/CAD-image PDFs can't be read in-browser &mdash; send those directly in chat and I'll convert them.</div>
+
+  <div class="dropgrid">
+    <div class="dropzone" id="zone-design" data-slot="Design">
+      <div class="label">Design drawing</div>
+      <div class="fname" id="fname-design">Click or drop CSV / XLSX / DXF</div>
+      <div class="count" id="count-design"></div>
+      <input type="file" id="file-design" accept=".csv,.xlsx,.xls,.dxf">
+    </div>
+    <div class="dropzone" id="zone-csv" data-slot="CSV">
+      <div class="label">CSV export</div>
+      <div class="fname" id="fname-csv">Click or drop CSV / XLSX / DXF</div>
+      <div class="count" id="count-csv"></div>
+      <input type="file" id="file-csv" accept=".csv,.xlsx,.xls,.dxf">
+    </div>
+    <div class="dropzone" id="zone-asbuilt" data-slot="As-Built">
+      <div class="label">As-built points</div>
+      <div class="fname" id="fname-asbuilt">Click or drop CSV / XLSX / DXF</div>
+      <div class="count" id="count-asbuilt"></div>
+      <input type="file" id="file-asbuilt" accept=".csv,.xlsx,.xls,.dxf">
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="field">
+      <label>Drawing no.</label>
+      <input type="text" id="drawingNo" placeholder="e.g. ECP-06" style="width:180px;">
+    </div>
+    <div class="field">
+      <label>Tolerance (m)</label>
+      <input type="number" id="tolerance" value="0.01" step="0.001" min="0">
+    </div>
+    <div class="field">
+      <label>Outlier check (m)</label>
+      <input type="number" id="outlier" value="100" step="10" min="0">
+    </div>
+    <button class="run" id="runBtn" disabled>Compare points</button>
+  </div>
+
+  <div id="results" style="display:none;">
+    <div class="summary" id="summaryStats"></div>
+    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+      <button class="dl" id="downloadBtn">Download result (.xlsx)</button>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr id="tableHead"></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="footer-note" id="notesArea"></div>
+  </div>
+
+</div>
+
+<script>
+document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-GB');
+
+const sources = {}; // {Design: {id:[e,n]}, CSV:{...}, 'As-Built':{...}}
+const slotKeys = ['design','csv','asbuilt'];
+const slotNames = {design:'Design', csv:'CSV', asbuilt:'As-Built'};
+
+function findHeaderRow(rows){
+  for(let i=0;i<Math.min(10,rows.length);i++){
+    const line = rows[i].join(' ').toLowerCase();
+    if(line.includes('north') || line.includes('east')) return i;
+  }
+  return 0;
+}
+
+function pickCols(header){
+  const low = header.map(h => String(h||'').trim().toLowerCase());
+  let idCol=-1, eCol=-1, nCol=-1;
+  low.forEach((h,i)=>{
+    if(idCol===-1 && ['point','point no','id','no','pt','point id','name'].includes(h)) idCol=i;
+    if(eCol===-1 && ['easting','e','x'].includes(h)) eCol=i;
+    if(nCol===-1 && ['northing','n','y'].includes(h)) nCol=i;
+  });
+  return {idCol, eCol, nCol};
+}
+
+function parseWorkbookToPoints(rows){
+  const headerRowIdx = findHeaderRow(rows);
+  const header = rows[headerRowIdx];
+  let {idCol, eCol, nCol} = pickCols(header);
+  if(idCol===-1) idCol = 0;
+  const dataRows = rows.slice(headerRowIdx+1);
+  if(eCol===-1 || nCol===-1){
+    const numericCols = [];
+    for(let c=0;c<header.length;c++){
+      let allNum = true, any=false;
+      for(const r of dataRows.slice(0,15)){
+        if(r[c]===undefined || r[c]==='') continue;
+        any = true;
+        if(isNaN(parseFloat(r[c]))){ allNum=false; break; }
+      }
+      if(allNum && any) numericCols.push(c);
+    }
+    if(numericCols.length>=2){ eCol = numericCols[0]; nCol = numericCols[1]; }
+  }
+  const pts = {};
+  for(const r of dataRows){
+    const pid = String(r[idCol]!==undefined ? r[idCol] : '').trim();
+    const e = parseFloat(r[eCol]);
+    const n = parseFloat(r[nCol]);
+    if(pid && pid.toLowerCase()!=='nan' && !isNaN(e) && !isNaN(n)){
+      pts[pid] = [e,n];
+    }
+  }
+  return pts;
+}
+
+function parseDXFPoints(text){
+  const lines = text.split(/\r\n|\r|\n/);
+  const entities = [];
+  let cur = null;
+  let i = 0;
+  while(i < lines.length - 1){
+    const code = lines[i].trim();
+    const value = lines[i+1];
+    if(code === '0'){
+      if(cur) entities.push(cur);
+      cur = {type: value.trim(), codes:{}};
+    } else if(cur){
+      const c = parseInt(code, 10);
+      if(!isNaN(c)){
+        if(!cur.codes[c]) cur.codes[c] = value.trim();
+      }
+    }
+    i += 2;
+  }
+  if(cur) entities.push(cur);
+
+  const rawPoints = [];
+  const labels = [];
+  entities.forEach(e=>{
+    if(e.type === 'POINT'){
+      const x = parseFloat(e.codes[10]);
+      const y = parseFloat(e.codes[20]);
+      if(!isNaN(x) && !isNaN(y)) rawPoints.push([x,y]);
+    } else if(e.type === 'TEXT' || e.type === 'MTEXT'){
+      const x = parseFloat(e.codes[10]);
+      const y = parseFloat(e.codes[20]);
+      const txt = (e.codes[1] || '').trim();
+      if(!isNaN(x) && !isNaN(y) && txt) labels.push([x,y,txt]);
+    }
+  });
+
+  const pts = {};
+  rawPoints.forEach((p, idx)=>{
+    const [x,y] = p;
+    let nearest = null, nearestDist = 2.0;
+    labels.forEach(([lx,ly,txt])=>{
+      const d = Math.hypot(lx-x, ly-y);
+      if(d < nearestDist){ nearestDist = d; nearest = txt; }
+    });
+    const pid = nearest || ('pt'+idx);
+    pts[pid] = [x,y];
+  });
+  return pts;
+}
+
+function readFile(file){
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext === 'dxf'){
+    return new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = e=>{
+        try{ resolve(parseDXFPoints(e.target.result)); }
+        catch(err){ reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:true, defval:''});
+        resolve(parseWorkbookToPoints(rows));
+      }catch(err){ reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function setupZone(key){
+  const zone = document.getElementById('zone-'+key);
+  const input = document.getElementById('file-'+key);
+  zone.addEventListener('click', ()=>input.click());
+  zone.addEventListener('dragover', e=>{e.preventDefault(); zone.classList.add('dragover');});
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); zone.classList.remove('dragover');
+    if(e.dataTransfer.files.length) handleFile(key, e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e=>{
+    if(e.target.files.length) handleFile(key, e.target.files[0]);
+  });
+}
+slotKeys.forEach(setupZone);
+
+async function handleFile(key, file){
+  const zone = document.getElementById('zone-'+key);
+  document.getElementById('fname-'+key).textContent = file.name;
+  try{
+    const pts = await readFile(file);
+    sources[slotNames[key]] = pts;
+    document.getElementById('count-'+key).textContent = Object.keys(pts).length + ' points';
+    zone.classList.add('filled');
+  }catch(err){
+    document.getElementById('count-'+key).textContent = 'Error reading file';
+  }
+  document.getElementById('runBtn').disabled = Object.keys(sources).length===0;
+}
+
+function idOverlapFraction(sources){
+  const names = Object.keys(sources);
+  if(names.length < 2) return 1;
+  const idSets = names.map(n => new Set(Object.keys(sources[n])));
+  let common = idSets[0];
+  for(let i=1;i<idSets.length;i++){
+    common = new Set([...common].filter(x=>idSets[i].has(x)));
+  }
+  const minSize = Math.min(...idSets.map(s=>s.size));
+  return minSize ? common.size / minSize : 0;
+}
+
+function nearestNeighborMatch(sources){
+  // Pick the source with fewest points as the anchor; match every other source's
+  // nearest unused point to each anchor point. Returns rows in the same shape as ID-based compare.
+  const names = Object.keys(sources);
+  const anchorName = names.reduce((a,b) => Object.keys(sources[a]).length <= Object.keys(sources[b]).length ? a : b);
+  const anchorPts = sources[anchorName];
+  const usedByOther = {};
+  names.forEach(n => usedByOther[n] = new Set());
+
+  const rows = [];
+  Object.keys(anchorPts).sort((a,b)=> a.length-b.length || (a<b?-1:a>b?1:0)).forEach(aid=>{
+    const [ae, an] = anchorPts[aid];
+    const row = {id: aid + ' (nearest-match)'};
+    row[anchorName+'_E'] = ae; row[anchorName+'_N'] = an;
+    let maxDiff = 0;
+    names.forEach(n=>{
+      if(n === anchorName) return;
+      let best=null, bestD=null;
+      Object.entries(sources[n]).forEach(([pid,[e,nn]])=>{
+        if(usedByOther[n].has(pid)) return;
+        const d = Math.hypot(ae-e, an-nn);
+        if(bestD===null || d<bestD){ bestD=d; best=pid; }
+      });
+      if(best!==null){
+        usedByOther[n].add(best);
+        row[n+'_E'] = sources[n][best][0];
+        row[n+'_N'] = sources[n][best][1];
+        maxDiff = Math.max(maxDiff, bestD);
+      } else {
+        row[n+'_E'] = null; row[n+'_N'] = null;
+      }
+    });
+    row.maxDiff = Math.round(maxDiff*10000)/10000;
+    const tolerance = parseFloat(document.getElementById('tolerance').value) || 0.01;
+    if(maxDiff > tolerance){ row.status='MISMATCH'; row.statusText = 'Mismatch ('+maxDiff.toFixed(3)+' m, matched by nearest location)'; }
+    else { row.status='OK'; row.statusText='OK (matched by nearest location)'; }
+    rows.push(row);
+  });
+  return {rows, names, byLocation:true};
+}
+
+function median(arr){
+  if(!arr.length) return null;
+  const s = [...arr].sort((a,b)=>a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length%2 ? s[mid] : (s[mid-1]+s[mid])/2;
+}
+
+function compare(){
+  const tolerance = parseFloat(document.getElementById('tolerance').value) || 0.01;
+  const outlierThresh = parseFloat(document.getElementById('outlier').value) || 100;
+  const names = Object.keys(sources);
+
+  const medians = {};
+  names.forEach(name=>{
+    const pts = sources[name];
+    const es = Object.values(pts).map(v=>v[0]);
+    const ns = Object.values(pts).map(v=>v[1]);
+    medians[name] = [median(es), median(ns)];
+  });
+
+  const allIds = new Set();
+  names.forEach(name => Object.keys(sources[name]).forEach(id=>allIds.add(id)));
+  const sortedIds = [...allIds].sort((a,b)=> a.length-b.length || (a<b?-1:a>b?1:0));
+
+  const rows = sortedIds.map(id=>{
+    const row = {id};
+    const coords = {};
+    names.forEach(name=>{
+      if(sources[name][id]){
+        coords[name] = sources[name][id];
+        row[name+'_E'] = sources[name][id][0];
+        row[name+'_N'] = sources[name][id][1];
+      } else {
+        row[name+'_E'] = null; row[name+'_N'] = null;
+      }
+    });
+    const vals = Object.values(coords);
+    let maxDiff = 0;
+    for(let i=0;i<vals.length;i++)
+      for(let j=i+1;j<vals.length;j++){
+        const d = Math.hypot(vals[i][0]-vals[j][0], vals[i][1]-vals[j][1]);
+        maxDiff = Math.max(maxDiff, d);
+      }
+    row.maxDiff = Math.round(maxDiff*10000)/10000;
+
+    const missing = names.filter(n=>!coords[n]);
+    const outliers = names.filter(n=>{
+      if(!coords[n]) return false;
+      const [me,mn] = medians[n];
+      const [e,n2] = coords[n];
+      return Math.abs(e-me)>outlierThresh || Math.abs(n2-mn)>outlierThresh;
+    });
+
+    if(outliers.length){ row.status='ERROR'; row.statusText = 'Data error (check '+outliers.join(', ')+' \u2014 possible decimal error)'; }
+    else if(missing.length){ row.status='MISSING'; row.statusText = 'Missing in '+missing.join(', '); }
+    else if(maxDiff>tolerance){ row.status='MISMATCH'; row.statusText = 'Mismatch ('+maxDiff.toFixed(3)+' m)'; }
+    else { row.status='OK'; row.statusText='OK'; }
+    return row;
+  });
+
+  return {rows, names};
+}
+
+document.getElementById('runBtn').addEventListener('click', ()=>{
+  const overlap = idOverlapFraction(sources);
+  let result;
+  if(overlap < 0.3 && Object.keys(sources).length > 1){
+    result = nearestNeighborMatch(sources);
+  } else {
+    result = compare();
+  }
+  renderResults(result.rows, result.names, result.byLocation);
+});
+
+let lastResult = null;
+
+function renderResults(rows, names, byLocation){
+  lastResult = {rows, names};
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('drawingMeta').innerHTML = 'Drawing No: '+(document.getElementById('drawingNo').value||'\u2014')+'<br>Date: '+new Date().toLocaleDateString('en-GB');
+
+  const counts = {OK:0, MISMATCH:0, ERROR:0, MISSING:0};
+  rows.forEach(r=>counts[r.status]++);
+  const summary = document.getElementById('summaryStats');
+  summary.innerHTML = `
+    <div class="stat ok"><div class="n">${counts.OK}</div><div class="l">Matching</div></div>
+    <div class="stat mismatch"><div class="n">${counts.MISMATCH}</div><div class="l">Mismatch</div></div>
+    <div class="stat error"><div class="n">${counts.ERROR}</div><div class="l">Data error</div></div>
+    <div class="stat missing"><div class="n">${counts.MISSING}</div><div class="l">Missing</div></div>
+  `;
+
+  const head = document.getElementById('tableHead');
+  let headHtml = '<th>Point ID</th>';
+  names.forEach(n=>{ headHtml += `<th>${n} E</th><th>${n} N</th>`; });
+  headHtml += '<th>Max diff (m)</th><th>Status</th>';
+  head.innerHTML = headHtml;
+
+  const statusSymbol = {OK:'\u2713 Match', MISMATCH:'\u2717 Mismatch', ERROR:'\u26A0 Data error', MISSING:'? Missing'};
+  const body = document.getElementById('tableBody');
+  body.innerHTML = rows.map(r=>{
+    let cells = `<td>${r.id}</td>`;
+    names.forEach(n=>{
+      cells += `<td>${r[n+'_E']!=null ? r[n+'_E'].toFixed(3) : '&mdash;'}</td><td>${r[n+'_N']!=null ? r[n+'_N'].toFixed(3) : '&mdash;'}</td>`;
+    });
+    cells += `<td>${r.maxDiff.toFixed(3)}</td><td><span class="badge ${r.status}">${statusSymbol[r.status]}</span></td>`;
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  const mismatchCount = counts.MISMATCH + counts.ERROR + counts.MISSING;
+  const drawingNo = document.getElementById('drawingNo').value;
+  const tolerance = document.getElementById('tolerance').value;
+  document.getElementById('notesArea').innerHTML =
+    (byLocation ? '<b>Note:</b> Point IDs did not line up between your files, so points were matched by nearest location instead of by ID. Review the "(nearest-match)" rows carefully. ' : '') +
+    (mismatchCount ? `${mismatchCount} point(s) flagged \u2014 see Status column.` : 'All points matching within tolerance.') +
+    (drawingNo ? ` Drawing No. ${drawingNo}${mismatchCount ? ' to be updated & resubmitted.' : '.'}` : '') +
+    ` Tolerance used: ${tolerance} m.`;
+}
+
+document.getElementById('downloadBtn').addEventListener('click', async ()=>{
+  if(!lastResult) return;
+  const {rows, names} = lastResult;
+  const drawingNo = document.getElementById('drawingNo').value;
+  const tolerance = parseFloat(document.getElementById('tolerance').value) || 0.01;
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Survey Comparison');
+
+  const headers = ['Point ID'];
+  names.forEach(n=>headers.push(n+' E', n+' N'));
+  headers.push('Max Diff (m)', 'Status');
+  const headerRow = ws.addRow(headers);
+  headerRow.eachCell(cell=>{
+    cell.font = {bold:true, name:'Arial', size:10, color:{argb:'FFFFFFFF'}};
+    cell.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF4472C4'}};
+    cell.alignment = {horizontal:'center', vertical:'middle'};
+    cell.border = {top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+  });
+
+  const idFill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFC6E0B4'}};
+  const coordFill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFDCE6F1'}};
+  const diffFill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFBE4D5'}};
+  const okFill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFC6EFCE'}};
+  const badFill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFC7CE'}};
+  const thin = {style:'thin', color:{argb:'FFB0B0B0'}};
+  const border = {top:thin,left:thin,bottom:thin,right:thin};
+
+  let mismatchCount = 0;
+  rows.forEach(r=>{
+    const line = [r.id];
+    names.forEach(n=>{ line.push(r[n+'_E'], r[n+'_N']); });
+    line.push(r.maxDiff, r.statusText);
+    const row = ws.addRow(line);
+
+    const idCell = row.getCell(1);
+    idCell.font = {bold:true, name:'Arial', size:10};
+    idCell.fill = idFill; idCell.border = border;
+
+    let col = 2;
+    names.forEach(()=>{
+      [0,1].forEach(()=>{
+        const c = row.getCell(col);
+        c.font = {italic:true, bold:true, name:'Arial', size:10};
+        c.fill = coordFill; c.border = border;
+        c.numFmt = '0.000';
+        col++;
+      });
+    });
+
+    const diffCell = row.getCell(col);
+    diffCell.numFmt = '0.000'; diffCell.fill = diffFill; diffCell.border = border;
+    col++;
+
+    const statusCell = row.getCell(col);
+    statusCell.border = border;
+    statusCell.font = {name:'Arial', size:10, bold: r.status!=='OK'};
+    statusCell.fill = r.status==='OK' ? okFill : badFill;
+    if(r.status!=='OK') mismatchCount++;
+  });
+
+  ws.addRow([]);
+  const notesHeaderRow = ws.addRow(['NOTES']);
+  notesHeaderRow.getCell(1).font = {bold:true, name:'Arial', size:11};
+
+  const noteLines = [];
+  noteLines.push(mismatchCount ? `1 - ${mismatchCount} point(s) Not matching \u2014 see Status column` : '1 - All points matching within tolerance');
+  if(drawingNo){
+    noteLines.push(mismatchCount ? `2 - Drawing No. ${drawingNo} \u2014 to be updated & Resubmitted` : `2 - Drawing No. ${drawingNo}`);
+  }
+  noteLines.push(`Tolerance used: ${tolerance.toFixed(3)} m`);
+  noteLines.forEach(line=>{
+    const r = ws.addRow(['', line]);
+    r.getCell(2).font = {bold:true, italic:true, name:'Arial', size:10, color:{argb:'FFFF0000'}};
+  });
+
+  ws.getColumn(1).width = 12;
+  for(let c=2;c<=headers.length;c++) ws.getColumn(c).width = 14;
+  ws.getColumn(headers.length).width = 30;
+  ws.views = [{state:'frozen', xSplit:1, ySplit:1}];
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (drawingNo || 'survey').replace(/[^a-z0-9]/gi,'_') + '_comparison.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
