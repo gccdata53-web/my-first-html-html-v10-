@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Missing Number Detector - CNP-6 Trees</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            direction: rtl;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .upload-section {
+            background: #f8f9fa;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .file-input-wrapper {
+            margin-bottom: 15px;
+        }
+
+        .file-input-wrapper label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .file-input-wrapper input[type="file"]:hover {
+            border-color: #667eea;
+            background: #f5f7ff;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .btn-analyze {
+            width: 100%;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-analyze:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-analyze:active {
+            transform: translateY(0);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+            display: none;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .stat-value.success { color: #1d9e75; }
+        .stat-value.danger { color: #e24b4a; }
+        .stat-value.info { color: #378add; }
+
+        .results-section {
+            display: none;
+        }
+
+        .status-box {
+            background: #e8f5e9;
+            border-left: 4px solid #1d9e75;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            color: #1d9e75;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .status-box.success {
+            background: #e8f5e9;
+            border-left-color: #1d9e75;
+            color: #1d9e75;
+            display: block;
+        }
+
+        .missing-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            margin-top: 20px;
+        }
+
+        .missing-list {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #333;
+            max-height: 300px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        .missing-list.empty {
+            background: #e8f5e9;
+            color: #1d9e75;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .missing-list.error {
+            background: #fce4ec;
+            color: #e24b4a;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .info-box {
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 3px solid;
+        }
+
+        .info-box.min {
+            background: rgba(29, 158, 117, 0.1);
+            border-left-color: #1d9e75;
+        }
+
+        .info-box.max {
+            background: rgba(216, 90, 48, 0.1);
+            border-left-color: #d85a30;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .error-box {
+            background: #fce4ec;
+            border-left: 4px solid #e24b4a;
+            padding: 15px;
+            border-radius: 6px;
+            color: #e24b4a;
+            font-size: 14px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #999;
+            font-size: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌳 Missing Number Detector</h1>
+            <p>CNP-6 Trees Coordinate Analysis Tool</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="file-input-wrapper">
+                <label for="csvFile">📊 CSV فائل منتخب کریں</label>
+                <input type="file" id="csvFile" accept=".csv">
+                <p class="help-text">CNP-6_TREES_COORDINATE_C.csv فائل upload کریں</p>
+            </div>
+
+            <div class="file-input-wrapper">
+                <label for="pdfFile">📄 PDF نقشہ (اختیاری)</label>
+                <input type="file" id="pdfFile" accept=".pdf">
+                <p class="help-text">تصدیق کے لیے (اختیاری)</p>
+            </div>
+
+            <button class="btn-analyze" onclick="analyzeFiles()">🔍 فائلیں تجزیہ کریں</button>
+        </div>
+
+        <div class="status-box" id="statusBox"></div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">کل ریکارڈز</div>
+                <div class="stat-value" id="totalRecords">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">غائب تعداد</div>
+                <div class="stat-value danger" id="missingCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">دستیاب</div>
+                <div class="stat-value success" id="availableCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">مکمل فیصد</div>
+                <div class="stat-value info" id="completionPct">0%</div>
+            </div>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="missing-title">غائب نمبرز</div>
+            <div class="missing-list" id="missingList"></div>
+
+            <div class="info-grid">
+                <div class="info-box min">
+                    <div class="info-label">کم سے کم نمبر</div>
+                    <div class="info-value" id="minNo">--</div>
+                </div>
+                <div class="info-box max">
+                    <div class="info-label">زیادہ سے زیادہ نمبر</div>
+                    <div class="info-value" id="maxNo">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="error-box" id="errorBox"></div>
+
+        <div class="footer">
+            <p>✓ یہ ٹول آن لائن کام کرتا ہے | کوئی ڈیٹا محفوظ نہیں ہوتا</p>
+            <p style="margin-top: 8px;">CNP-6 Trees Coordinate System Analyzer</p>
+        </div>
+    </div>
+
+    <script>
+        function analyzeFiles() {
+            const csvFile = document.getElementById('csvFile').files[0];
+            if (!csvFile) {
+                showError('براہ کرم CSV فائل upload کریں');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const csv = e.target.result;
+                    const lines = csv.split('\n');
+                    const numbers = new Set();
+                    let maxNo = 0;
+                    let minNo = Infinity;
+
+                    for (let i = 2; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+                        
+                        const parts = line.split(',');
+                        const no = parseInt(parts[0]);
+                        
+                        if (!isNaN(no)) {
+                            numbers.add(no);
+                            maxNo = Math.max(maxNo, no);
+                            minNo = Math.min(minNo, no);
+                        }
+                    }
+
+                    if (minNo === Infinity) {
+                        showError('CSV فائل میں کوئی درست نمبرز نہیں ملے');
+                        return;
+                    }
+
+                    const totalExpected = maxNo - minNo + 1;
+                    const available = numbers.size;
+                    const missing = totalExpected - available;
+                    const completion = ((available / totalExpected) * 100).toFixed(1);
+
+                    const missingNumbers = [];
+                    for (let i = minNo; i <= maxNo; i++) {
+                        if (!numbers.has(i)) {
+                            missingNumbers.push(i);
+                        }
+                    }
+
+                    document.getElementById('totalRecords').textContent = totalExpected;
+                    document.getElementById('missingCount').textContent = missing;
+                    document.getElementById('availableCount').textContent = available;
+                    document.getElementById('completionPct').textContent = completion + '%';
+                    document.getElementById('minNo').textContent = minNo;
+                    document.getElementById('maxNo').textContent = maxNo;
+
+                    if (missingNumbers.length === 0) {
+                        document.getElementById('missingList').className = 'missing-list empty';
+                        document.getElementById('missingList').innerHTML = '✓ کوئی غائب نمبر نہیں! تمام entries موجود ہیں';
+                        document.getElementById('statusBox').className = 'status-box success';
+                        document.getElementById('statusBox').innerHTML = '✓ فائل مکمل اور صحیح ہے';
+                    } else {
+                        const groupedMissing = [];
+                        let start = missingNumbers[0];
+                        let end = start;
+
+                        for (let i = 1; i < missingNumbers.length; i++) {
+                            if (missingNumbers[i] === end + 1) {
+                                end = missingNumbers[i];
+                            } else {
+                                if (start === end) {
+                                    groupedMissing.push(start.toString());
+                                } else {
+                                    groupedMissing.push(`${start}-${end}`);
+                                }
+                                start = missingNumbers[i];
+                                end = start;
+                            }
+                        }
+                        if (start === end) {
+                            groupedMissing.push(start.toString());
+                        } else {
+                            groupedMissing.push(`${start}-${end}`);
+                        }
+
+                        document.getElementById('missingList').className = 'missing-list error';
+                        document.getElementById('missingList').innerHTML = 
+                            `<strong>غائب نمبرز:</strong> ${groupedMissing.join(', ')}<br><br>` +
+                            `<strong>کل غائب:</strong> ${missingNumbers.length} نمبرز`;
+                    }
+
+                    document.getElementById('statsGrid').style.display = 'grid';
+                    document.getElementById('resultsSection').style.display = 'block';
+                    document.getElementById('errorBox').style.display = 'none';
+
+                } catch (err) {
+                    showError('CSV فائل میں خرابی: ' + err.message);
+                }
+            };
+            reader.readAsText(csvFile);
+        }
+
+        function showError(msg) {
+            document.getElementById('errorBox').style.display = 'block';
+            document.getElementById('errorBox').textContent = '❌ ' + msg;
+            document.getElementById('statsGrid').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('statusBox').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
