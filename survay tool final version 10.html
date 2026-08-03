@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coordinate Matcher — Duct Survey Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+<style>
+:root{
+  --ink:#1b1f2a;
+  --ink-soft:#5b6478;
+  --paper:#f5f6fa;
+  --card:#ffffff;
+  --line:#e2e4ee;
+  --indigo:#4f46e5;
+  --indigo-deep:#3730a3;
+  --violet:#7c3aed;
+  --ok:#16a34a;
+  --warn:#d97706;
+  --bad:#dc2626;
+  --bubbler:#a3612b;
+  --dripline:#d4b400;
+  --mainline:#c026d3;
+  --wiring:#1d4ed8;
+  --mdfpower:#06b6d4;
+  --lighting:#dc2626;
+  --cctv:#65a30d;
+  --radius:14px;
+  --shadow: 0 1px 2px rgba(20,20,40,.04), 0 8px 24px -12px rgba(30,20,80,.18);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:'Segoe UI', Roboto, -apple-system, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 100% -10%, #ece9fe 0%, transparent 60%),
+    radial-gradient(1000px 500px at -10% 0%, #e6f7fb 0%, transparent 55%),
+    var(--paper);
+  color:var(--ink);
+  min-height:100vh;
+}
+header.top{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 28px; background:var(--card); border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:50;
+}
+.brand{display:flex; align-items:center; gap:12px;}
+.brand .mark{
+  width:38px;height:38px;border-radius:10px;
+  background:linear-gradient(135deg,var(--indigo),var(--violet));
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;
+}
+.brand h1{font-size:17px;margin:0;letter-spacing:.2px;}
+.brand p{margin:0;font-size:12px;color:var(--ink-soft);}
+.project-tag{
+  font-size:12px; color:var(--indigo-deep); background:#eef0ff; border:1px solid #dcdcff;
+  padding:5px 10px; border-radius:999px; font-weight:600;
+}
+main{max-width:1400px;margin:0 auto;padding:24px 24px 60px;}
+
+.grid-top{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+@media(max-width:900px){.grid-top{grid-template-columns:1fr;}}
+
+.card{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.card .hd{
+  padding:13px 18px; font-weight:600; font-size:14px; color:#fff;
+  background:linear-gradient(90deg,var(--indigo),var(--violet));
+  display:flex;align-items:center;justify-content:space-between;
+}
+.card .bd{padding:18px;}
+.dropzone{
+  border:2px dashed #c7c9e8; border-radius:12px; padding:26px 16px; text-align:center;
+  cursor:pointer; transition:.15s; background:#fafaff;
+}
+.dropzone:hover{border-color:var(--indigo); background:#f2f1ff;}
+.dropzone.drag{border-color:var(--violet); background:#efe9ff;}
+.dropzone .big{font-size:15px;font-weight:600;}
+.dropzone .small{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+.fileok{
+  margin-top:10px;font-size:12.5px;color:var(--ok);font-weight:600;
+  display:flex;align-items:center;gap:6px;
+}
+.row-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.stat{background:#f7f7fb;border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center;}
+.stat .lab{font-size:10.5px;letter-spacing:.06em;color:var(--ink-soft);text-transform:uppercase;}
+.stat .val{font-size:20px;font-weight:700;color:var(--indigo-deep);margin-top:2px;}
+.btn{
+  width:100%;margin-top:14px;border:none;border-radius:10px;padding:12px;
+  background:linear-gradient(90deg,var(--indigo),var(--violet));color:#fff;font-weight:600;
+  font-size:14px;cursor:pointer;transition:.15s;
+}
+.btn:hover{filter:brightness(1.06);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn.secondary{background:#fff;color:var(--indigo-deep);border:1px solid #d6d6f5;}
+.btn.small{width:auto;padding:8px 14px;font-size:12.5px;}
+input[type=number], input[type=text]{
+  border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px;width:100%;
+}
+
+.cat-bar{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;}
+.cat-chip{
+  border:1px solid var(--line); background:#fff; border-radius:999px; padding:7px 13px;
+  font-size:12.5px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:7px;
+  color:var(--ink); transition:.12s;
+}
+.cat-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+.cat-chip.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+.cat-chip .cnt{opacity:.65;font-weight:500;}
+
+.section-title{font-size:13px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin:26px 0 10px;}
+
+.results-wrap{display:grid;grid-template-columns:1.1fr 1fr;gap:18px;}
+@media(max-width:1100px){.results-wrap{grid-template-columns:1fr;}}
+
+.search-bar{display:flex;gap:8px;margin-bottom:12px;}
+.search-bar input{flex:1;}
+
+table.pts{width:100%;border-collapse:collapse;font-size:12.5px;}
+table.pts th{
+  text-align:left;background:#f6f6fb;color:var(--ink-soft);font-weight:700;
+  padding:8px 9px;position:sticky;top:0;font-size:11px;text-transform:uppercase;letter-spacing:.04em;
+  border-bottom:1px solid var(--line);
+}
+table.pts td{padding:7px 9px;border-bottom:1px solid #eef0f6;}
+table.pts tr:hover td{background:#faf9ff;}
+.tbl-scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;}
+.badge{
+  font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;display:inline-block;
+}
+.badge.similar{background:#dcfce7;color:#166534;}
+.badge.missing{background:#fee2e2;color:#991b1b;}
+.badge.manual{background:#fef3c7;color:#92400e;}
+.badge.unverified{background:#e5e7eb;color:#374151;}
+.badge.fromcsv{background:#dcfce7;color:#166534;}
+.swatch{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;}
+
+.pt-card{
+  border-radius:10px; padding:12px 14px; margin-bottom:9px; border-left:4px solid #ccc;
+  background:#fafafc; display:flex; align-items:center; justify-content:space-between; gap:10px;
+}
+.pt-card.similar{background:#f0fdf4; border-left-color:var(--ok);}
+.pt-card.missing{background:#fef2f2; border-left-color:var(--bad);}
+.pt-card.manual{background:#fffbeb; border-left-color:var(--warn);}
+.pt-card.unverified{background:#f4f4f6; border-left-color:#9ca3af;}
+.pt-card.fromcsv{background:#f0fdf4; border-left-color:var(--ok);}
+.pt-card .actions{display:flex;gap:6px;flex-shrink:0;}
+.pt-card .actions button{
+  border:none;border-radius:7px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;
+}
+.pt-card .actions .set-manual{background:#fff;color:var(--warn);border:1px solid #fde68a;}
+.pt-card .actions .set-fromcsv{background:var(--ok);color:#fff;}
+.pt-card .who{font-weight:700;font-size:13.5px;}
+.pt-card .coords{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.diag-banner{
+  font-size:12.5px; padding:10px 12px; border-radius:10px; margin-bottom:12px; line-height:1.5;
+  background:#fff7ed; border:1px solid #fed7aa; color:#9a3412;
+}
+
+.pdf-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.pdf-toolbar button{
+  border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:12.5px;
+}
+.pdf-toolbar button:hover{background:#f4f4fb;}
+.pdf-stage{
+  position:relative;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:560px;background:#eceef5;
+}
+.pdf-stage canvas{display:block;}
+.calib-note{font-size:11.5px;color:var(--ink-soft);margin-top:8px;line-height:1.5;}
+.calib-note b{color:var(--indigo-deep);}
+.legend-mini{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);margin-top:10px;}
+.legend-mini span{display:flex;align-items:center;gap:5px;}
+
+.empty{padding:30px 14px;text-align:center;color:var(--ink-soft);font-size:13px;}
+.footer-note{margin-top:26px;font-size:11.5px;color:var(--ink-soft);text-align:center;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div class="mark">🌳</div>
+    <div>
+      <h1>Coordinate Matcher</h1>
+      <p>CSV coordinates ↔ PDF drawing verification &amp; manual check</p>
+    </div>
+  </div>
+  <div class="project-tag" id="projectTag">No project loaded</div>
+</header>
+
+<main>
+
+  <div class="grid-top">
+    <!-- PDF CARD -->
+    <div class="card">
+      <div class="hd"><span>📄 PDF Map</span></div>
+      <div class="bd">
+        <div class="dropzone" id="pdfDrop">
+          <div class="big">📤 Drag PDF file here</div>
+          <div class="small">Or click here</div>
+          <input type="file" id="pdfInput" accept="application/pdf" style="display:none">
+        </div>
+        <div class="fileok" id="pdfFileOk" style="display:none;">✓ <span id="pdfFileName"></span></div>
+        <div class="row-stats">
+          <div class="stat"><div class="lab">Page</div><div class="val"><span id="pageNum">–</span>/<span id="pageCount">–</span></div></div>
+          <div class="stat"><div class="lab">Coordinates found</div><div class="val" id="tokenCount">–</div></div>
+        </div>
+        <button class="btn" id="loadPdfBtn" disabled>Load</button>
+        <div class="calib-note" id="pdfStatus" style="min-height:16px;"></div>
+      </div>
+    </div>
+
+    <!-- CSV CARD -->
+    <div class="card">
+      <div class="hd"><span>📊 CSV file</span></div>
+      <div class="bd">
+        <div class="dropzone" id="csvDrop">
+          <div class="big">📤 Drag CSV file here</div>
+          <div class="small">Or click here (single file, or drop multiple)</div>
+          <input type="file" id="csvInput" accept=".csv" multiple style="display:none">
+        </div>
+        <div class="fileok" id="csvFileOk" style="display:none;">✓ <span id="csvFileName"></span></div>
+        <div class="row-stats">
+          <div class="stat"><div class="lab">Categories found</div><div class="val" id="catCount">–</div></div>
+          <div class="stat"><div class="lab">Total records</div><div class="val" id="recCount">–</div></div>
+        </div>
+        <button class="btn" id="analyzeBtn" disabled>Analyze</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CATEGORY SEARCH BAR -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="hd"><span>🔎 Search by name</span><span style="font-weight:400;font-size:12px;opacity:.85;">power · wiring · lighting · dripline · bubbler · mainline · cctv · all</span></div>
+    <div class="bd">
+      <div class="cat-bar" id="catBar">
+        <div class="empty" style="padding:6px 0;">Load a CSV to see categories here.</div>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="numSearch" placeholder="…Find the number (NO, Easting or Northing)">
+        <button class="btn small secondary" id="clearSearchBtn">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="section-title">✓ Results and confirmation</div>
+  <div class="results-wrap">
+
+    <div class="card">
+      <div class="bd">
+        <div class="diag-banner" id="diagBanner" style="display:none;"></div>
+        <div class="row-stats" style="grid-template-columns:repeat(4,1fr);margin-top:0;">
+          <div class="stat"><div class="lab">Similar</div><div class="val" style="color:var(--ok)" id="simCount">0</div></div>
+          <div class="stat"><div class="lab">Missing</div><div class="val" style="color:var(--bad)" id="missCount">0</div></div>
+          <div class="stat"><div class="lab">Manual verification</div><div class="val" style="color:var(--warn)" id="manCount">0</div></div>
+          <div class="stat"><div class="lab">From CSV</div><div class="val" style="color:var(--ok)" id="unvCount">0</div></div>
+        </div>
+
+        <div class="tbl-scroll" style="margin-top:14px;padding:10px;">
+          <div id="resultsBody">
+            <div class="empty">Drop a PDF and a CSV above — results appear here automatically.</div>
+          </div>
+        </div>
+        <button class="btn secondary" id="downloadBtn" style="margin-top:14px;" disabled>⬇ Download Results (CSV)</button>
+      </div>
+    </div>
+
+    <!-- PDF EXHIBITION -->
+    <div class="card">
+      <div class="hd"><span>📖 PDF Exhibition</span></div>
+      <div class="bd">
+        <div class="pdf-toolbar">
+          <button id="prevPage">‹ Prev</button>
+          <span id="pageLabel" style="font-size:12.5px;color:var(--ink-soft);">Page – / –</span>
+          <button id="nextPage">Next ›</button>
+          <button id="zoomOut">−</button>
+          <span id="zoomLabel" style="font-size:12.5px;color:var(--ink-soft);">100%</span>
+          <button id="zoomIn">+</button>
+        </div>
+        <div class="pdf-stage" id="pdfStage">
+          <div class="empty">Load a PDF to preview the drawing.</div>
+        </div>
+        <div class="legend-mini" id="legendMini"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">Runs entirely in your browser — files are never uploaded anywhere.</div>
+</main>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ---------- category config ----------
+const CATS = {
+  bubbler:   {label:'Bubbler',   color:'#a3612b', match:/BUBBLER/i},
+  dripline:  {label:'Drip Line', color:'#d4b400', match:/DRIP/i},
+  mainline:  {label:'Main Line', color:'#c026d3', match:/MAIN\s*LINE|MINE\s*LINE/i},
+  wiring:    {label:'Wiring',    color:'#1d4ed8', match:/WIRING/i},
+  mdfpower:  {label:'MDF (Power)', color:'#06b6d4', match:/MDF|POWER/i},
+  lighting:  {label:'Lighting',  color:'#dc2626', match:/LIGHT/i},
+  cctv:      {label:'CCTV',      color:'#65a30d', match:/CCTV/i},
+};
+function detectCategory(text){
+  for(const key in CATS){ if(CATS[key].match.test(text)) return key; }
+  return null;
+}
+
+// ---------- state ----------
+let pdfDoc=null, currentPage=1, zoom=1.0, pdfTokens=[]; // pdfTokens: {text,num,x,y,page}
+let ocrRows=[]; // rows read via OCR from embedded raster coordinate tables: {no,easting,northing,category,page}
+let csvPoints=[]; // {no, easting, northing, category}
+let activeCategory='all';
+let results=[]; // matched results
+
+// ---------- helpers ----------
+function toast(msg){ console.log(msg); }
+function parseNum(v){
+  if(v===undefined||v===null) return NaN;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g,''));
+  return n;
+}
+
+// ================= PDF handling =================
+const pdfDrop=document.getElementById('pdfDrop');
+const pdfInput=document.getElementById('pdfInput');
+const pdfFileOk=document.getElementById('pdfFileOk');
+const pdfFileName=document.getElementById('pdfFileName');
+const loadPdfBtn=document.getElementById('loadPdfBtn');
+let pendingPdfFile=null;
+
+function wireDrop(dropEl, inputEl, onFile, multiple){
+  dropEl.addEventListener('click',()=>inputEl.click());
+  dropEl.addEventListener('dragover',e=>{e.preventDefault();dropEl.classList.add('drag');});
+  dropEl.addEventListener('dragleave',()=>dropEl.classList.remove('drag'));
+  dropEl.addEventListener('drop',e=>{
+    e.preventDefault();dropEl.classList.remove('drag');
+    const files=multiple? Array.from(e.dataTransfer.files) : [e.dataTransfer.files[0]];
+    onFile(files);
+  });
+  inputEl.addEventListener('change',e=>{
+    const files=multiple? Array.from(e.target.files) : [e.target.files[0]];
+    onFile(files);
+  });
+}
+
+wireDrop(pdfDrop, pdfInput, (files)=>{
+  if(!files[0]) return;
+  pendingPdfFile=files[0];
+  pdfFileOk.style.display='flex';
+  pdfFileName.textContent=pendingPdfFile.name;
+  loadPdfBtn.disabled=false;
+  loadPdf(); // auto-run — no extra click needed
+}, false);
+
+loadPdfBtn.addEventListener('click', loadPdf);
+
+function setPdfStatus(msg){ document.getElementById('pdfStatus').textContent = msg||''; }
+
+async function loadPdf(){
+  if(!pendingPdfFile) return;
+  loadPdfBtn.disabled=true; loadPdfBtn.textContent='Loading…';
+  try{
+    setPdfStatus('Reading file…');
+    const buf=await pendingPdfFile.arrayBuffer();
+    pdfDoc = await pdfjsLib.getDocument({data:buf}).promise;
+    document.getElementById('pageCount').textContent=pdfDoc.numPages;
+    currentPage=1;
+    await extractAllTokens();
+    await renderPage(currentPage);
+    updateProjectTag();
+    setPdfStatus('Done ✓');
+    if(csvPoints.length) runMatching(); // auto-analyze once both files are ready
+  }catch(err){
+    console.error('PDF load failed:', err);
+    alert('PDF load nahi hua: '+ (err && err.message ? err.message : err));
+    document.getElementById('pdfStage').innerHTML = '<div class="empty">PDF load fail hua — file corrupt ho sakti hai ya unsupported format. Console check karo (F12).</div>';
+    setPdfStatus('');
+  }finally{
+    loadPdfBtn.textContent='Load';
+    loadPdfBtn.disabled=false;
+  }
+}
+
+async function extractAllTokens(){
+  pdfTokens=[]; ocrRows=[];
+  let ocrRegionsSeen=0;
+  for(let p=1;p<=pdfDoc.numPages;p++){
+    setPdfStatus(`Reading text — page ${p}/${pdfDoc.numPages}…`);
+    const page = await pdfDoc.getPage(p);
+    const tc = await page.getTextContent();
+    const viewport = page.getViewport({scale:1});
+    tc.items.forEach(it=>{
+      const str = (it.str||'').trim();
+      if(!str) return;
+      const num = parseNum(str);
+      const x = it.transform[4];
+      const y = viewport.height - it.transform[5];
+      pdfTokens.push({text:str, num:isNaN(num)?null:num, x, y, page:p});
+    });
+    // Many CAD-exported drawings embed the coordinate table as a picture, not real text.
+    // Find those embedded raster regions and OCR them so matching still works.
+    try{
+      const regions = await getImageRegions(page);
+      ocrRegionsSeen += regions.length;
+      if(regions.length){
+        const rows = await ocrTablesFromPage(page, regions, (i,n)=>setPdfStatus(`OCR table ${i}/${n} on page ${p}…`));
+        rows.forEach(r=>r.page=p);
+        ocrRows.push(...rows);
+      }
+    }catch(err){
+      console.warn('OCR extraction failed for page', p, err);
+    }
+  }
+  const vectorNums = pdfTokens.filter(t=>t.num!==null).length;
+  const bigVectorNums = pdfTokens.filter(t=>t.num!==null && Math.abs(t.num)>50000).length;
+  document.getElementById('tokenCount').textContent = vectorNums + ocrRows.length;
+  showDiagnostics(bigVectorNums, ocrRegionsSeen, ocrRows.length);
+  setPdfStatus(ocrRows.length ? `Done ✓ (${ocrRows.length} coordinates read from drawing tables via OCR)` : 'Done ✓');
+}
+
+function showDiagnostics(bigVectorNums, regionsSeen, ocrRowCount){
+  const el=document.getElementById('diagBanner');
+  if(bigVectorNums>0 || ocrRowCount>0){ el.style.display='none'; return; }
+  el.style.display='block';
+  if(regionsSeen>0){
+    el.innerHTML = `⚠ PDF mein <b>${regionsSeen} table image(s)</b> mile, lekin OCR unhe padh nahi saka — is browser mein koi restriction lag rahi hai. Results neeche safe rehnay ke liye <b>"From CSV"</b> (green) dikhenge, red "Missing" nahi laga (taake asal missing ducts se confuse na ho). Fix: file ko <b>double-click</b> karne ki bajaye ek local server se kholo (VS Code "Live Server", ya <code>python3 -m http.server</code>), ya console (F12) check karo.`;
+  } else {
+    el.innerHTML = `⚠ Is PDF mein na koi coordinate-scale text mila, na koi raster table image detect hui. Sab results <b>"From CSV"</b> (green) dikhenge. Agar coordinate table PDF mein hai to screenshot bhejo, dekhta hoon.`;
+  }
+}
+
+// ---- locate embedded raster images (coordinate tables) in page space ----
+function pdfMatMul(m1, m2){
+  return [
+    m1[0]*m2[0] + m1[1]*m2[2],
+    m1[0]*m2[1] + m1[1]*m2[3],
+    m1[2]*m2[0] + m1[3]*m2[2],
+    m1[2]*m2[1] + m1[3]*m2[3],
+    m1[4]*m2[0] + m1[5]*m2[2] + m2[4],
+    m1[4]*m2[1] + m1[5]*m2[3] + m2[5]
+  ];
+}
+async function getImageRegions(page){
+  const opList = await page.getOperatorList();
+  const OPS = pdfjsLib.OPS;
+  let ctm=[1,0,0,1,0,0];
+  const stack=[]; const regions=[];
+  for(let i=0;i<opList.fnArray.length;i++){
+    const fn=opList.fnArray[i], args=opList.argsArray[i];
+    if(fn===OPS.save){ stack.push(ctm.slice()); }
+    else if(fn===OPS.restore){ if(stack.length) ctm=stack.pop(); }
+    else if(fn===OPS.transform){ ctm=pdfMatMul(args, ctm); }
+    else if(fn===OPS.paintImageXObject || fn===OPS.paintJpegXObject){
+      const corners=[[0,0],[1,0],[1,1],[0,1]].map(([x,y])=>({
+        x:x*ctm[0]+y*ctm[2]+ctm[4], y:x*ctm[1]+y*ctm[3]+ctm[5]
+      }));
+      const xs=corners.map(c=>c.x), ys=corners.map(c=>c.y);
+      const w=Math.max(...xs)-Math.min(...xs), h=Math.max(...ys)-Math.min(...ys);
+      if(w>15 && h>15){
+        regions.push({x0:Math.min(...xs), x1:Math.max(...xs), y0:Math.min(...ys), y1:Math.max(...ys)});
+      }
+    }
+  }
+  return regions;
+}
+
+// ---- render page once, crop each region at high res, OCR each crop ----
+async function ocrTablesFromPage(page, regions, progressCb){
+  const workScale=2.2;
+  const viewport=page.getViewport({scale:workScale});
+  const workCanvas=document.createElement('canvas');
+  workCanvas.width=viewport.width; workCanvas.height=viewport.height;
+  await page.render({canvasContext:workCanvas.getContext('2d'), viewport}).promise;
+
+  const allRows=[];
+  for(let i=0;i<regions.length;i++){
+    if(progressCb) progressCb(i+1, regions.length);
+    const r=regions[i];
+    const corners=[[r.x0,r.y0],[r.x1,r.y0],[r.x1,r.y1],[r.x0,r.y1]].map(([x,y])=>viewport.convertToViewportPoint(x,y));
+    const xs=corners.map(c=>c[0]), ys=corners.map(c=>c[1]);
+    const sx=Math.max(0,Math.min(...xs)), sy=Math.max(0,Math.min(...ys));
+    const sw=Math.min(workCanvas.width-sx, Math.max(...xs)-sx);
+    const sh=Math.min(workCanvas.height-sy, Math.max(...ys)-sy);
+    if(sw<10 || sh<10) continue;
+    const upscale=Math.min(4, 1500/sw);
+    const cropCanvas=document.createElement('canvas');
+    cropCanvas.width=Math.max(1,Math.round(sw*upscale));
+    cropCanvas.height=Math.max(1,Math.round(sh*upscale));
+    cropCanvas.getContext('2d').drawImage(workCanvas, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height);
+    try{
+      const { data:{ text } } = await Tesseract.recognize(cropCanvas, 'eng');
+      allRows.push(...parseOcrTable(text));
+    }catch(err){
+      console.warn('OCR failed on region', i, err);
+    }
+  }
+  return allRows;
+}
+
+// Parses lines like "12  259840.508  2713681.336" out of noisy OCR text,
+// and tags them with whatever category name appears in that block's header.
+function parseOcrTable(text){
+  const category = detectCategory(text);
+  const rows=[];
+  const numRe=/-?\d{2,}(?:\.\d+)?/g;
+  text.split('\n').forEach(line=>{
+    const nums=line.match(numRe);
+    if(!nums || nums.length<3) return;
+    const big=nums.filter(n=>Math.abs(parseFloat(n))>1000);
+    if(big.length>=2){
+      const no=nums[0];
+      const easting=parseFloat(big[big.length-2]);
+      const northing=parseFloat(big[big.length-1]);
+      if(!isNaN(easting) && !isNaN(northing)){
+        rows.push({no, easting, northing, category});
+      }
+    }
+  });
+  return rows;
+}
+
+async function renderPage(num){
+  if(!pdfDoc) return;
+  const page = await pdfDoc.getPage(num);
+  const stage = document.getElementById('pdfStage');
+  const baseViewport = page.getViewport({scale:1});
+  const fitScale = (stage.clientWidth || 600) / baseViewport.width;
+  const viewport = page.getViewport({scale: fitScale*zoom});
+  stage.innerHTML='';
+  const canvas=document.createElement('canvas');
+  canvas.width=viewport.width; canvas.height=viewport.height;
+  stage.appendChild(canvas);
+  const ctx=canvas.getContext('2d');
+  await page.render({canvasContext:ctx, viewport}).promise;
+  document.getElementById('pageNum').textContent=num;
+  document.getElementById('pageLabel').textContent=`Page ${num} / ${pdfDoc.numPages}`;
+  document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%';
+}
+
+document.getElementById('prevPage').onclick=()=>{ if(currentPage>1){currentPage--; renderPage(currentPage);} };
+document.getElementById('nextPage').onclick=()=>{ if(pdfDoc && currentPage<pdfDoc.numPages){currentPage++; renderPage(currentPage);} };
+document.getElementById('zoomIn').onclick=()=>{ zoom=Math.min(zoom+0.2,3); renderPage(currentPage); };
+document.getElementById('zoomOut').onclick=()=>{ zoom=Math.max(zoom-0.2,0.4); renderPage(currentPage); };
+
+// ================= CSV handling =================
+const csvDrop=document.getElementById('csvDrop');
+const csvInput=document.getElementById('csvInput');
+const csvFileOk=document.getElementById('csvFileOk');
+const csvFileName=document.getElementById('csvFileName');
+const analyzeBtn=document.getElementById('analyzeBtn');
+let pendingCsvFiles=[];
+
+wireDrop(csvDrop, csvInput, (files)=>{
+  pendingCsvFiles = files.filter(Boolean);
+  if(!pendingCsvFiles.length) return;
+  csvFileOk.style.display='flex';
+  csvFileName.textContent = pendingCsvFiles.map(f=>f.name).join(', ');
+  analyzeBtn.disabled=false;
+  analyzeCsv(); // auto-run — no extra click needed
+}, true);
+
+analyzeBtn.addEventListener('click', analyzeCsv);
+
+async function analyzeCsv(){
+  if(!pendingCsvFiles.length) return;
+  analyzeBtn.disabled=true; analyzeBtn.textContent='Analyzing…';
+  csvPoints=[];
+  for(const file of pendingCsvFiles){
+    const text = await file.text();
+    const parsed = Papa.parse(text, {skipEmptyLines:false});
+    parseMultiBlockCSV(parsed.data);
+  }
+  const cats = [...new Set(csvPoints.map(p=>p.category))];
+  document.getElementById('catCount').textContent = cats.length;
+  document.getElementById('recCount').textContent = csvPoints.length;
+  buildCategoryBar();
+  analyzeBtn.textContent='Analyze';
+  analyzeBtn.disabled=false;
+  updateProjectTag();
+  runMatching(); // auto-analyze — works even if PDF isn't loaded yet (falls back to manual-check status)
+}
+
+// Detects one or more category blocks laid out side-by-side / stacked in a raw CSV grid,
+// where each block has a header cell containing the category name, a sub-header row
+// (NO, EASTING, NORTHING), then numeric data rows.
+function parseMultiBlockCSV(rows){
+  const nRows = rows.length;
+  const nCols = Math.max(...rows.map(r=>r.length), 0);
+  for(let r=0;r<nRows;r++){
+    for(let c=0;c<nCols;c++){
+      const cell = (rows[r][c]||'').toString();
+      if(!cell) continue;
+      const cat = detectCategory(cell);
+      if(!cat) continue;
+      // find sub-header row (NO/EASTING/NORTHING) within next 2 rows, same column window
+      let subRow=-1, colNo=null, colE=null, colN=null;
+      for(let rr=r+1; rr<=Math.min(r+2,nRows-1); rr++){
+        const rowStr = rows[rr].slice(c,c+4).join('|').toUpperCase();
+        if(rowStr.includes('EASTING') || rowStr.includes('NORTH')){
+          subRow=rr;
+          // locate exact columns within this row — NO must match exactly (NORTHING also
+          // starts with "NO" as a substring, so a loose .includes('NO') check would wrongly
+          // grab the Northing column; require an exact token match instead)
+          for(let cc=c; cc<Math.min(c+5,nCols); cc++){
+            const v=(rows[rr][cc]||'').toString().trim().toUpperCase();
+            if(/^(NO\.?|S\.?NO\.?|SR\.?\s*NO\.?|POINT\s*NO\.?)$/.test(v)) colNo=cc;
+            else if(/EAST/.test(v)) colE=cc;
+            else if(/NORTH/.test(v)) colN=cc;
+          }
+          break;
+        }
+      }
+      if(subRow===-1 || colNo===null || colE===null || colN===null) continue; // headers not confidently identified — skip rather than guess
+      // read data rows until non-numeric / blank NO cell
+      let dataRow = subRow+1;
+      while(dataRow<nRows){
+        const noVal = (rows[dataRow][colNo]||'').toString().trim();
+        const eVal = parseNum(rows[dataRow][colE]);
+        const nVal = parseNum(rows[dataRow][colN]);
+        if(noVal==='' || isNaN(eVal) || isNaN(nVal)) break;
+        csvPoints.push({no:noVal, easting:eVal, northing:nVal, category:cat});
+        dataRow++;
+      }
+    }
+  }
+}
+
+function buildCategoryBar(){
+  const bar=document.getElementById('catBar');
+  bar.innerHTML='';
+  const counts={};
+  csvPoints.forEach(p=>counts[p.category]=(counts[p.category]||0)+1);
+  const allChip=document.createElement('div');
+  allChip.className='cat-chip active';
+  allChip.dataset.cat='all';
+  allChip.innerHTML=`<span class="dot" style="background:#1b1f2a"></span>All <span class="cnt">${csvPoints.length}</span>`;
+  bar.appendChild(allChip);
+  Object.keys(CATS).forEach(key=>{
+    if(!counts[key]) return;
+    const chip=document.createElement('div');
+    chip.className='cat-chip';
+    chip.dataset.cat=key;
+    chip.innerHTML=`<span class="dot" style="background:${CATS[key].color}"></span>${CATS[key].label} <span class="cnt">${counts[key]}</span>`;
+    bar.appendChild(chip);
+  });
+  bar.querySelectorAll('.cat-chip').forEach(chip=>{
+    chip.addEventListener('click',()=>{
+      bar.querySelectorAll('.cat-chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      activeCategory=chip.dataset.cat;
+      renderResults();
+    });
+  });
+  // legend mini
+  const lm=document.getElementById('legendMini');
+  lm.innerHTML='';
+  Object.keys(CATS).forEach(key=>{
+    if(!counts[key]) return;
+    const s=document.createElement('span');
+    s.innerHTML=`<span class="swatch" style="background:${CATS[key].color}"></span>${CATS[key].label} (${counts[key]})`;
+    lm.appendChild(s);
+  });
+}
+
+// ================= Matching =================
+function runMatching(){
+  if(!csvPoints.length){ return; }
+  results = csvPoints.map(p=>{
+    const auto = matchAgainstPdf(p);
+    // Display status: only ever show red "Missing" when OCR genuinely read a coordinate
+    // table and still couldn't find this point. Otherwise trust the CSV (green) rather
+    // than falsely alarming — an unreadable PDF is not the same thing as a missing duct.
+    let status;
+    if(auto==='similar') status='similar';
+    else if(auto==='manual') status='manual';
+    else if(auto==='missing') status = ocrRows.length>0 ? 'missing' : 'fromcsv';
+    else status='fromcsv'; // 'unverified'
+    return {...p, status, auto};
+  });
+  renderResults();
+  document.getElementById('downloadBtn').disabled = results.length===0;
+}
+
+function matchAgainstPdf(p){
+  if(!pdfDoc) return 'unverified'; // no PDF loaded yet
+  // Only numbers big enough to plausibly BE an easting/northing count as a coordinate
+  // signal — a CAD drawing is full of small annotation numbers (slopes, elevations,
+  // point tags like "3.49" or "268") that must never be treated as coordinates.
+  const bigVectorNums = pdfTokens.filter(t=>t.num!==null && Math.abs(t.num)>50000);
+  if(ocrRows.length===0 && bigVectorNums.length===0) return 'unverified'; // no real coordinate source found in the PDF at all
+  const tolOcr = 1.0, tolText = 0.5;
+
+  // 1) OCR row — same category AND same NO (strongest signal)
+  const sameCatNo = ocrRows.find(r=>r.category===p.category && String(r.no)===String(p.no));
+  if(sameCatNo){
+    const eOk=Math.abs(sameCatNo.easting-p.easting)<=tolOcr;
+    const nOk=Math.abs(sameCatNo.northing-p.northing)<=tolOcr;
+    if(eOk && nOk) return 'similar';
+    if(eOk || nOk) return 'manual';
+  }
+  // 2) OCR row — same category, matched by coordinate value (NO labelling may differ)
+  const catHit = ocrRows.some(r=>r.category===p.category &&
+    Math.abs(r.easting-p.easting)<=tolOcr && Math.abs(r.northing-p.northing)<=tolOcr);
+  if(catHit) return 'similar';
+
+  // 3) OCR row — any category matched by value (coordinates exist in PDF, but under a different category — flag for review)
+  const anyCatHit = ocrRows.some(r=>
+    Math.abs(r.easting-p.easting)<=tolOcr && Math.abs(r.northing-p.northing)<=tolOcr);
+  if(anyCatHit) return 'manual';
+
+  // 4) Fall back to vector text layer (drawings that have real selectable coordinate text)
+  if(bigVectorNums.length){
+    const eHit = bigVectorNums.some(t=>Math.abs(t.num-p.easting)<=tolText);
+    const nHit = bigVectorNums.some(t=>Math.abs(t.num-p.northing)<=tolText);
+    if(eHit && nHit) return 'similar';
+    if(eHit || nHit) return 'manual';
+  }
+  return 'missing';
+}
+
+const STATUS_LABEL = {similar:'Similar (OCR ✓)', missing:'Missing', manual:'Manual check', unverified:"Can't verify", fromcsv:'From CSV'};
+
+function renderResults(){
+  const body=document.getElementById('resultsBody');
+  const search=(document.getElementById('numSearch').value||'').trim().toLowerCase();
+  let rows = results;
+  if(activeCategory!=='all') rows = rows.filter(r=>r.category===activeCategory);
+  if(search){
+    rows = rows.filter(r=>
+      String(r.no).toLowerCase().includes(search) ||
+      String(r.easting).toLowerCase().includes(search) ||
+      String(r.northing).toLowerCase().includes(search)
+    );
+  }
+  body.innerHTML='';
+  if(!rows.length){
+    body.innerHTML = `<div class="empty">No matching points.</div>`;
+  } else {
+    rows.forEach(r=>{
+      const catInfo = CATS[r.category] || {label:r.category||'Uncategorised', color:'#999'};
+      const card=document.createElement('div');
+      card.className='pt-card '+r.status;
+      card.innerHTML = `
+        <div>
+          <div class="who"><span class="swatch" style="background:${catInfo.color}"></span>${catInfo.label} #${r.no}</div>
+          <div class="coords">E: ${r.easting}  |  N: ${r.northing}</div>
+        </div>
+        <div class="actions">
+          <button class="set-manual">✎ Manual</button>
+          <button class="set-fromcsv">✓ From CSV</button>
+        </div>
+      `;
+      card.querySelector('.set-manual').onclick=()=>{ r.status='manual'; renderResults(); };
+      card.querySelector('.set-fromcsv').onclick=()=>{ r.status='fromcsv'; renderResults(); };
+      body.appendChild(card);
+    });
+  }
+  const shown = activeCategory==='all' ? results : results.filter(r=>r.category===activeCategory);
+  document.getElementById('simCount').textContent = shown.filter(r=>r.status==='similar').length;
+  document.getElementById('missCount').textContent = shown.filter(r=>r.status==='missing').length;
+  document.getElementById('manCount').textContent = shown.filter(r=>r.status==='manual').length;
+  document.getElementById('unvCount').textContent = shown.filter(r=>r.status==='fromcsv'||r.status==='unverified').length;
+}
+
+document.getElementById('numSearch').addEventListener('input', renderResults);
+document.getElementById('clearSearchBtn').addEventListener('click', ()=>{
+  document.getElementById('numSearch').value='';
+  renderResults();
+});
+
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const rows = activeCategory==='all' ? results : results.filter(r=>r.category===activeCategory);
+  let csv = 'NO,CATEGORY,EASTING,NORTHING,STATUS\n';
+  rows.forEach(r=>{
+    const statusLabel = (r.status==='unverified'||r.status==='fromcsv') ? "FROM CSV (not verified against PDF)" : STATUS_LABEL[r.status].toUpperCase();
+    csv += `${r.no},${(CATS[r.category]||{label:r.category}).label},${r.easting},${r.northing},${statusLabel}\n`;
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='coordinate_match_results.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+window.addEventListener('resize', ()=>{ if(pdfDoc) renderPage(currentPage); });
+
+function updateProjectTag(){
+  const tag=document.getElementById('projectTag');
+  const parts=[];
+  if(pendingPdfFile) parts.push(pendingPdfFile.name.replace(/\.pdf$/i,''));
+  if(csvPoints.length) parts.push(csvPoints.length+' pts');
+  tag.textContent = parts.length ? parts.join(' · ') : 'No project loaded';
+}
+</script>
+</body>
+</html>
